@@ -83,6 +83,62 @@ proc segment_command_flags_name {flags} {
 
 ####################################################################################################
 
+proc nlist_type_flags_name {flags} {
+    set result ""
+    set type_flags [expr $flags & 0x0e]
+
+    if { ($flags & 0xe0) != 0 } { set result "$result N_STAB" }
+    if { ($flags & 0x10) != 0 } { set result "$result N_PEXT" }
+    if { $type_flags != 0 } {
+        if { ($type_flags == 0x02) != 0 } { set result "$result N_ABS" }
+        if { ($type_flags == 0x0e) != 0 } { set result "$result N_SECT" }
+        if { ($type_flags == 0x0c) != 0 } { set result "$result N_PBUD" }
+        if { ($type_flags == 0x0a) != 0 } { set result "$result N_INDR" }
+    }
+    if { ($flags & 0x01) != 0 } { set result "$result N_EXT" }
+
+    if { $result == "" } {
+        return "none"
+    } else {
+        return [join $result " | "]
+    }
+}
+
+####################################################################################################
+
+proc nlist_desc_flags_name {flags} {
+    set result ""
+    set reference_type [expr $flags & 0x07]
+
+    if { $reference_type == 0 } { set result "$result REFERENCE_FLAG_UNDEFINED_NON_LAZY" }
+    if { $reference_type == 1 } { set result "$result REFERENCE_FLAG_UNDEFINED_LAZY" }
+    if { $reference_type == 2 } { set result "$result REFERENCE_FLAG_DEFINED" }
+    if { $reference_type == 3 } { set result "$result REFERENCE_FLAG_PRIVATE_DEFINED" }
+    if { $reference_type == 4 } { set result "$result REFERENCE_FLAG_PRIVATE_UNDEFINED_NON_LAZY" }
+    if { $reference_type == 5 } { set result "$result REFERENCE_FLAG_PRIVATE_UNDEFINED_LAZY" }
+
+    if { ($flags & 0x0010) != 0 } { set result "$result REFERENCED_DYNAMICALLY" }
+    # Note: 0x0020 may also mean N_DESC_DISCARDED, but "never appears in a linked image",
+    # so if we find it we'll assume the value is N_NO_DEAD_STRIP.
+    if { ($flags & 0x0020) != 0 } { set result "$result N_NO_DEAD_STRIP" }
+    if { ($flags & 0x0040) != 0 } { set result "$result N_WEAK_REF" }
+    # Note: 0x0080 may also mean N_REF_TO_WEAK. I'm not entirely clear when to interpret the value
+    # as one v. the other, so I'll pick this for now and address later if needed.
+    if { ($flags & 0x0080) != 0 } { set result "$result N_WEAK_DEF" }
+    if { ($flags & 0x0008) != 0 } { set result "$result N_ARM_THUMB_DEF" }
+    if { ($flags & 0x0100) != 0 } { set result "$result N_SYMBOL_RESOLVER" }
+    if { ($flags & 0x0200) != 0 } { set result "$result N_ALT_ENTRY" }
+    if { ($flags & 0x0400) != 0 } { set result "$result N_COLD_FUNC" }
+
+    if { $result == "" } {
+        return "none"
+    } else {
+        return [join $result " | "]
+    }
+}
+
+####################################################################################################
+
 proc filetype_name {filetype} {
     if {$filetype == 0x1} { return "MH_OBJECT" }
     if {$filetype == 0x2} { return "MH_EXECUTE" }
@@ -316,9 +372,11 @@ proc lc_version_min_macosx {main_offset command_size} {
 proc lc_symtab_nlist_64 {stroff count} {
     section "\[ $count \]" {
         set n_strx [uint32 n_strx]
-        set n_type [uint8 n_type]
+        set n_type [uint8]
+        entry "n_type" [nlist_type_flags_name $n_type] 1 [expr [pos] - 1]
         set n_sect [uint8 n_sect]
-        set n_desc [uint16 n_desc]
+        set n_desc [uint16]
+        entry "n_desc" [nlist_desc_flags_name $n_desc] 2 [expr [pos] - 2]
         set n_value [uint64 n_value]
         jumpa [expr $stroff + $n_strx] {
             set symbol_name [cstr "ascii" symbol_name]
